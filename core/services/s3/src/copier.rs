@@ -104,14 +104,32 @@ impl oio::MultipartCopy for S3Copier {
 
         match resp.status() {
             StatusCode::OK => {
-                let body = resp.into_body().to_bytes();
+                let (parts, body) = resp.into_parts();
+                let bs = body.to_bytes();
 
-                let result: CopyObjectResult =
-                    quick_xml::de::from_reader(body.as_ref()).map_err(new_xml_deserialize_error)?;
+                let result: CopyObjectResult = quick_xml::de::from_reader(bs.as_ref())
+                    .map_err(new_xml_deserialize_error)?;
+
+                // S3 may return 200 OK with an <Error> body for CopyObject.
+                // Route the typed error code through from_s3_error so the
+                // caller sees the correct ErrorKind/retryability
+                // (e.g. SlowDown -> RateLimited, NoSuchBucket -> ConfigInvalid)
+                // and so RequestId is preserved for support follow-up.
+                if !result.etag.is_empty() {
+                    return Err(from_s3_error(
+                        S3Error {
+                            code: result.code,
+                            message: result.message,
+                            resource: String::new(),
+                            request_id: result.request_id,
+                        },
+                        parts,
+                    ));
+                }
 
                 if result.etag.is_empty() {
                     return Err(
-                        Error::new(ErrorKind::Unexpected, String::from_utf8_lossy(&body))
+                        Error::new(ErrorKind::Unexpected, String::from_utf8_lossy(&bs))
                             .set_temporary(),
                     );
                 }
@@ -161,13 +179,30 @@ impl oio::MultipartCopy for S3Copier {
 
         match resp.status() {
             StatusCode::OK => {
-                let body = resp.into_body().to_bytes();
-                let result: CopyObjectResult =
-                    quick_xml::de::from_reader(body.as_ref()).map_err(new_xml_deserialize_error)?;
+                let (parts, body) = resp.into_parts();
+                let bs = body.to_bytes();
+                let result: CopyObjectResult = quick_xml::de::from_reader(bs.as_ref())
+                    .map_err(new_xml_deserialize_error)?;
+
+                // S3 may return 200 OK with an <Error> body for UploadPartCopy.
+                // Route the typed error code through from_s3_error so the
+                // caller sees the correct ErrorKind/retryability and so
+                // RequestId is preserved for support follow-up.
+                if !result.code.is_empty() {
+                    return Err(from_s3_error(
+                        S3Error {
+                            code: result.code,
+                            message: result.message,
+                            resource: String::new(),
+                            request_id: result.request_id,
+                        },
+                        parts,
+                    ));
+                }
 
                 if result.etag.is_empty() {
                     return Err(
-                        Error::new(ErrorKind::Unexpected, String::from_utf8_lossy(&body))
+                        Error::new(ErrorKind::Unexpected, String::from_utf8_lossy(&bs))
                             .set_temporary(),
                     );
                 }

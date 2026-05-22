@@ -1335,15 +1335,25 @@ pub struct CompleteMultipartUploadResult {
     pub request_id: String,
 }
 
-/// Partial output of a successful `CopyObject` operation.
+/// Body of a `CopyObject` or `UploadPartCopy` response.
+///
+/// S3 may return HTTP 200 OK with either a `<CopyObjectResult>` success body or
+/// an `<Error>` body for these operations, because the response status is
+/// committed to the wire before the server-to-server copy actually finishes.
+/// We deserialize permissively so a single struct can capture both shapes; the
+/// caller distinguishes by checking whether `code` is set.
 ///
 /// ref: <https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html#API_CopyObject_ResponseSyntax>
+/// ref: <https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html>
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct CopyObjectResult {
     #[serde(rename = "ETag")]
     pub etag: String,
     pub last_modified: String,
+    pub code: String,
+    pub message: String,
+    pub request_id: String,
 }
 
 /// Request of DeleteObjects.
