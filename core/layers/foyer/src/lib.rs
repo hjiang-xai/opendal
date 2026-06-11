@@ -413,6 +413,19 @@ mod tests {
         assert_eq!(buf.to_vec(), b"6789");
     }
 
+/*
+running 1 test
+test tests::test_full_reader_suffix_range ... FAILED
+
+failures:
+
+---- tests::test_full_reader_suffix_range stdout ----
+
+thread 'tests::test_full_reader_suffix_range' (14888113) panicked at core/src/types/bytes_range.rs:172:17:
+BytesRange::to_range_as_usize is not supported for suffix ranges
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+*/
+
     #[tokio::test]
     async fn test_full_reader_open_fallback_preserves_stream() {
         let cache = memory_cache().await;
