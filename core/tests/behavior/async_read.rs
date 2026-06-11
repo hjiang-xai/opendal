@@ -34,6 +34,7 @@ pub fn tests(op: &Operator, tests: &mut Vec<Trial>) {
             op,
             test_read_full,
             test_read_range,
+            test_read_with_suffix,
             test_reader,
             test_buffer_stream_metadata,
             test_buffer_stream_metadata_with_concurrent,
@@ -108,6 +109,44 @@ pub async fn test_read_range(op: Operator) -> anyhow::Result<()> {
         sha256_digest(&bs),
         sha256_digest(&content[offset as usize..(offset + length) as usize]),
         "read content"
+    );
+
+    Ok(())
+}
+
+/// Suffix read should return exactly the last `n` bytes.
+pub async fn test_read_with_suffix(op: Operator) -> anyhow::Result<()> {
+    let (path, content, size) = TEST_FIXTURE.new_file(op.clone());
+
+    op.write(&path, content.clone())
+        .await
+        .expect("write must succeed");
+
+    // Suffix smaller than the file: read the last `suffix` bytes.
+    let suffix = (size as u64 / 2).max(1);
+    let bs = op
+        .read_with(&path)
+        .range(BytesRange::suffix(suffix))
+        .await?
+        .to_bytes();
+    assert_eq!(bs.len() as u64, suffix, "suffix read size");
+    assert_eq!(
+        sha256_digest(&bs),
+        sha256_digest(&content[size - suffix as usize..]),
+        "suffix read content"
+    );
+
+    // Suffix larger than the file: read the whole file.
+    let bs = op
+        .read_with(&path)
+        .range(BytesRange::suffix(size as u64 + 1024))
+        .await?
+        .to_bytes();
+    assert_eq!(bs.len(), size, "oversized suffix read size");
+    assert_eq!(
+        sha256_digest(&bs),
+        sha256_digest(&content),
+        "oversized suffix read content"
     );
 
     Ok(())
